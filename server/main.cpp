@@ -1,7 +1,7 @@
 #include <includelib.hpp>
 #include "center.hpp"
-
 int main(int argc, char* argv[]) {  
+
     if (argc == 1){
         std::cout << "|[Neum:V] "<<argv[0]<<" <filename> vil --gal"<<std::endl;
     }
@@ -15,7 +15,10 @@ int main(int argc, char* argv[]) {
             std::cout<<help2_server;
         }
         else{
-            file::read_file<std::string>("hello");
+            serverManager sm;
+            serverManager::Host hm(sm);
+
+            //read_file<std::string>("hello");
         }
 
     }
