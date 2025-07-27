@@ -27,6 +27,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <thread>
+#include <atomic>
 
 #include "binlib.hpp"
 
@@ -42,3 +43,5 @@
 
 
 #include "log.hpp"
+
+#include "funcs.hpp"
