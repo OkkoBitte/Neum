@@ -18,13 +18,17 @@ private:
         return true;
     }
 
-
     bool purgeClient_unsafe(hex_t hexClient) {
         auto it = virtual_connections.find(hexClient);
-        if (it == virtual_connections.end()) {
-            return false;
-        }
-        close(it->second.desc);
+        if (it == virtual_connections.end()) return false;
+        if(it->second.desc>0)close(it->second.desc);
+        virtual_connections.erase(it);
+        return true;
+    }
+    bool dltClient_unsafe(hex_t hexClient){
+        auto it = virtual_connections.find(hexClient);
+        if (it == virtual_connections.end()) return false;
+        
         virtual_connections.erase(it);
         return true;
     }
@@ -56,6 +60,7 @@ public:
         auto hex = hex_t(newData);
         return virtual_connections.emplace(std::move(hex), newData).second;
     }
+    
     client_connection_data* getClient(hex_t hexClient) {
         std::lock_guard<std::mutex> lock(map_mutex);
         if (auto it = virtual_connections.find(hexClient); it != virtual_connections.end()) {
@@ -64,7 +69,6 @@ public:
         return nullptr;
     }
 
-
     bool mdfClient(hex_t hexClient, const client_connection_data& newData) {
         std::lock_guard<std::mutex> lock(map_mutex);
         return mdfClient_unsafe(hexClient, newData);
@@ -72,7 +76,7 @@ public:
 
     bool dltClient(hex_t hexClient) {
         std::lock_guard<std::mutex> lock(map_mutex);
-        return purgeClient_unsafe(hexClient);
+        return dltClient_unsafe(hexClient);
     }
 
     bool purgeClient(hex_t hexClient) {
@@ -134,10 +138,7 @@ public:
         } log::def("stoped clients managment");
     }
     void stop();
-
-    void loop(){
-        while (work){}
-    }
+    void loop(){ while (work){} }
 };
 
 
@@ -160,28 +161,42 @@ class hostManager{
             uint16_t data_size;
             memcpy(&data_size, packet_raw.data_size, sizeof(data_size));
             data_size = ntohs(data_size);
+            std::cout << "GET PACKET DATA SIZE: " << data_size << std::endl;
 
-            
             const size_t MAX_ALLOWED_SIZE = manager.serverConfigure.maxGetClientPacket;
-            if(data_size > MAX_ALLOWED_SIZE) {
+            if (data_size > MAX_ALLOWED_SIZE) {
                 throw std::runtime_error("Data size too large");
             }
 
-            
             std::vector<uint8_t> fulldata(data_size);
-
-            
             size_t total_read = 0;
-            while(total_read < data_size) {
-                int bytesRead = recv(client_data.desc, fulldata.data() + total_read, 
-                                    data_size - total_read, 0);
+
+            while (total_read < data_size) {
                 
-                if(bytesRead <= 0) {
-                    throw std::runtime_error("Connection closed prematurely");
+                int bytesRead = recv(
+                    client_data.desc,
+                    fulldata.data() + total_read,  
+                    data_size - total_read,       
+                    0
+                );
+
+                if (bytesRead <= 0) {
+                   
+                    if (bytesRead == 0) {
+                        throw std::runtime_error("Connection closed by peer");
+                    } else {
+                        throw std::runtime_error("recv() error: " + std::to_string(errno));
+                    }
                 }
+
                 total_read += bytesRead;
             }
 
+            std::cout << "NEW DATA (" << total_read << " bytes):" << std::endl;
+            for (auto byte : fulldata) {
+                std::cout << std::hex << static_cast<int>(byte) << ":";
+            }
+            std::cout << std::endl << std::endl;
             
             auto ccd = manager.getClient(hex_t(client_data));
                 
@@ -198,14 +213,10 @@ class hostManager{
 
         } catch(const std::exception& e) {
             log::err(std::string("Client error: ") + e.what());
-            purgeClient(client_data);
+            close(client_data.desc);
+            
         }
     }
-    void purgeClient(client_connection_data cd){
-        close(cd.desc);
-        manager.dltClient(hex_t(cd));
-    }
-
     bool startSocketServer() {
         if(isActive) return false;
         socket_desc = socket(AF_INET, SOCK_STREAM, 0);
@@ -275,6 +286,8 @@ class hostManager{
             std::thread([this, new_client, packet = header]() {
                 this->handleClient(new_client, packet);
             }).detach();
+
+            
         } log::def("stoped socket server");
         return true;
     }

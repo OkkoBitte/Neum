@@ -163,6 +163,7 @@ public:
 
         
         }
+        return "[FATER]";
     }
     static bool is_special_char(char s) {return spec_sims.find(s) != spec_sims.end();}
     const static char TRIG   = '$';
