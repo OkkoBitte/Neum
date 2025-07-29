@@ -1,32 +1,35 @@
+
+
 namespace SeyController{
-    class seyManager{
+    class seyManager{   
         private:
-        std::vector<sey_t> seys;
+        std::map<hex_t, sey_t> seys;
         std::string pathToSey;
-        server_configure serverConfigure;
 
         void seyDumps(){
             
         }
 
         public:
-        seyManager(server_configure sc): serverConfigure(sc) {
+        seyManager(server_configure sc) {
             pathToSey = sc.pathClientsData;
             seyDumps();
         }
 
         std::optional<sey_t> getSey(sey_t seyf){
-            for (auto sey : seys){
-                if( sey == seyf ) return sey;
-            }
+            
             return std::nullopt;
+        }
+        
+        void addSey(hex_t clientHx, sey_t sey){
+
         }
 
 
     };
 
     bool isSey (SeyController::seyManager& sm, sey_t sey){
-        return (sm.getSey(sey)!= std::nullopt)? true : false;
+        return (sm.getSey(sey)!= std::nullopt)? true : false; // ?(a ?= b)
     };       
 };
 
@@ -123,12 +126,14 @@ namespace serverConfigureController{
         
         return retconf;
     }
-}
+};
 
 
 
 
 
 namespace PacketController{
-
+    class packetManager{
+        
+    };
 }

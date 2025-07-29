@@ -28,6 +28,7 @@
 #include <arpa/inet.h>
 #include <thread>
 #include <atomic>
+#include <csignal>
 
 #include "binlib.hpp"
 

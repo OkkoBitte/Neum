@@ -16,17 +16,19 @@ struct req10_t { // option form
         for (int i = 0; i < 10; ++i) {
             full[i] = options[i];
         }
-        code1=full[0]; // what client (new/old)
+        code1=full[0]; // what client (new/old) // 0x01 - обсолютно новый, 0x02 - повторное (может из за ошибки)
         code2=full[1]; // what type connection (get-close/constant)
         code3=full[2]; // what action of passivation client (wait/closing)
         code4=full[3]; // type connection (passive/activ)
-        code5=full[4]; // 
+        code5=full[4]; 
         code6=full[5];
         code7=full[6];
-        code8=full[7];
-        code9=full[8];
-        code10=full[9];
+        code8=full[7]; 
+        code9=full[8];  
+        code10=full[9]; 
     }
+
+
     bool operator==(const uint8_t other[10]) const {
         return memcmp(full, other, sizeof(full)) == 0;
     }
@@ -41,8 +43,7 @@ struct req10_t { // option form
     }
 
 };
-
-
+  
 struct sey_t{ // session key
     char sey_main[10];
     
