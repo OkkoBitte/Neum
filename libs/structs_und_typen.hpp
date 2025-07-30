@@ -45,11 +45,11 @@ struct req10_t { // option form
 };
   
 struct sey_t{ // session key
-    char sey_main[10];
+    char sey_main[20];
     
-    sey_t(char   sey[10]){ memcpy(sey_main, sey, 10); }
+    sey_t(char   sey[20]){ memcpy(sey_main, sey, 20); }
 
-    bool operator==(sey_t &other) const { return strncmp(sey_main, other.sey_main, 10) == 0; }
+    bool operator==(sey_t &other) const { return strncmp(sey_main, other.sey_main, 20) == 0; }
     
 };
 
@@ -58,38 +58,45 @@ struct client_connection_data {
     time_t last_activity_time; 
     req10_t client_options;
     sey_t sey;
-    size_t desc;
+    int desc;
 
     sockaddr_in clinet_sock;
 
-    client_connection_data(time_t t, req10_t opts, sey_t s, size_t d, sockaddr_in sci) 
-        : time_start(t), last_activity_time(t), client_options(opts), sey(s),  desc(d) , clinet_sock(sci){};
+    client_connection_data(time_t t, req10_t opts, sey_t s, int d, sockaddr_in sci) 
+        : time_start(t), last_activity_time(t), client_options(opts), sey(s),desc(d), clinet_sock(sci){};//  
 };
 
 
-struct hex_t{ // hex of userData
-    char* hexe;
-    hex_t (client_connection_data d){
+struct hex_t {
+    std::string hexe; 
+
+    hex_t(const client_connection_data& d) {
         std::stringstream ss;
         ss << std::hex << d.time_start;
         for (int i = 0; i < 10 && d.sey.sey_main[i] != '\0'; ++i) {
             ss << std::setw(2) << std::setfill('0') 
                << std::hex << (int)(unsigned char)d.sey.sey_main[i];
         }
-        std::string hexStr = ss.str();
-        hexe = strdup(hexStr.c_str());
+        hexe = ss.str();  
     }
-    ~hex_t() {
-        free(hexe);
+
+   
+    bool operator<(const hex_t& other) const { 
+        return hexe < other.hexe; 
     }
-    bool operator<(const hex_t& other) const { return strcmp(hexe, other.hexe) < 0; }
 };
 
-struct client_packet_raw{
+struct client_head_packet_raw{
     uint8_t client_options[10];// 0-10
     char    client_sey[20];    // 10-20;
-    uint8_t data_size[2];      // 20-22
-    // data 22+
 
 };
 
+struct packet_s{
+    uint8_t type[1];       // 0
+    uint8_t hxcode[2];     // 1-2
+    uint8_t timeout[1];    // 3
+    uint8_t datasize[2];   // 4-5
+                           // 6++
+
+};

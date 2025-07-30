@@ -19,12 +19,29 @@ private:
     }
 
     bool purgeClient_unsafe(hex_t hexClient) {
+    try {
+        
+        
         auto it = virtual_connections.find(hexClient);
-        if (it == virtual_connections.end()) return false;
-        if(it->second.desc>0)close(it->second.desc);
-        virtual_connections.erase(it);
+        if (it == virtual_connections.end()) {
+            log::warn ( "Client not found");
+            return false;
+        }
+
+      
+        if (it->second.desc != -1) {
+            const int fd = it->second.desc;
+            it->second.desc = -1; 
+            close(fd);
+        }
+
+        virtual_connections.erase(it++);
         return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Error in purge: " << e.what() << std::endl;
+        return false;
     }
+}
     bool dltClient_unsafe(hex_t hexClient){
         auto it = virtual_connections.find(hexClient);
         if (it == virtual_connections.end()) return false;
@@ -43,6 +60,7 @@ protected:
 public:
 
     server_configure serverConfigure;
+    virtual void newClientConnection(hex_t client_hex) = 0;
     virtual void getClientData(hex_t client_hex, const std::vector<uint8_t>& data) = 0;
     
     serverManager(server_configure config): serverConfigure(config), pmanager(), smanager(config), work(true){
@@ -54,11 +72,12 @@ public:
      
 
     }
-    
+
     bool addClient(const client_connection_data& newData) {
         std::lock_guard<std::mutex> lock(map_mutex);
         auto hex = hex_t(newData);
-        return virtual_connections.emplace(std::move(hex), newData).second;
+        return virtual_connections.insert_or_assign(hex, newData).second;
+        
     }
     
     client_connection_data* getClient(hex_t hexClient) {
@@ -84,7 +103,6 @@ public:
         return purgeClient_unsafe(hexClient);
     }
 
-    
     size_t getClientConnectionsCount(){
         std::lock_guard<std::mutex> lock(map_mutex);
         return virtual_connections.size();
@@ -93,52 +111,37 @@ public:
     void MENEGMANT_CLIENTS() {
         int when = 0;
         while (work) {
-            if ((when%5) != 0){
+            if ((when % 5) != 0) {
                 std::lock_guard<std::mutex> lock(map_mutex);
-                for(auto& [hex, data] : virtual_connections) {
-                    
-                    // get Client optons
+                
+              
+                std::vector<hex_t> to_remove;
+                for (const auto& [hex, data] : virtual_connections) {
                     req10_t co = data.client_options;
                     time_t now = time(nullptr);
-                    
 
-                    // CHECK CLIENT VALIDATION    
-                    if(co.code1 == 0x01){ 
-                        smanager.addSey(hex, data.sey);
-
-                    }
-
-                    // CHECING CLEINTS ACTIVE
-                    if ((now - data.last_activity_time) > serverConfigure.sleepClients){   
-                        /*
-                            0x00 -- close
-                            0xxx(any) == client need for sleep time
-
-                        
-                        */
-                        
-                        if (co.code3 == 0x00){ // CLOSE
-                            purgeClient_unsafe(data);
-                        }
-                        else{
-                            if ((now - data.last_activity_time) > int(co.code3) && int(co.code3) > serverConfigure.maxSleepClients){ // WAIT CLIENT SECONDS
-                                purgeClient_unsafe(data);
-                            }
+                    if ((now - data.last_activity_time) > serverConfigure.sleepClients) {
+                        if (co.code3 == 0x00 || 
+                            ((now - data.last_activity_time) > int(co.code3) && 
+                            (int(co.code3) > serverConfigure.maxSleepClients))) {
+                            to_remove.push_back(hex);
                         }
                     }
-                    
                 }
-
-
+            
+                for (const auto& hex : to_remove) {
+                    purgeClient_unsafe(hex);
+                }
             }
-            else std::this_thread::sleep_for(std::chrono::seconds(1));
-
-            when++;
-            when = (when>9999)? 0 : when;
-        } log::def("stoped clients managment");
+            else {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            }
+            when = (when > 9999) ? 0 : when + 1;
+        }
     }
+
     void stop();
-    void loop(){ while (work){} }
+    void loop(){ while (work){ std::this_thread::sleep_for(std::chrono::seconds(1));} }
 };
 
 
@@ -154,69 +157,8 @@ class hostManager{
         std::thread socketServerThread( [&] () {startSocketServer();});
         socketServerThread.detach();
     }
+
     
-    void handleClient(client_connection_data client_data, client_packet_raw packet_raw) {
-        try {
-            
-            uint16_t data_size;
-            memcpy(&data_size, packet_raw.data_size, sizeof(data_size));
-            data_size = ntohs(data_size);
-            std::cout << "GET PACKET DATA SIZE: " << data_size << std::endl;
-
-            const size_t MAX_ALLOWED_SIZE = manager.serverConfigure.maxGetClientPacket;
-            if (data_size > MAX_ALLOWED_SIZE) {
-                throw std::runtime_error("Data size too large");
-            }
-
-            std::vector<uint8_t> fulldata(data_size);
-            size_t total_read = 0;
-
-            while (total_read < data_size) {
-                
-                int bytesRead = recv(
-                    client_data.desc,
-                    fulldata.data() + total_read,  
-                    data_size - total_read,       
-                    0
-                );
-
-                if (bytesRead <= 0) {
-                   
-                    if (bytesRead == 0) {
-                        throw std::runtime_error("Connection closed by peer");
-                    } else {
-                        throw std::runtime_error("recv() error: " + std::to_string(errno));
-                    }
-                }
-
-                total_read += bytesRead;
-            }
-
-            std::cout << "NEW DATA (" << total_read << " bytes):" << std::endl;
-            for (auto byte : fulldata) {
-                std::cout << std::hex << static_cast<int>(byte) << ":";
-            }
-            std::cout << std::endl << std::endl;
-            
-            auto ccd = manager.getClient(hex_t(client_data));
-                
-            if(!ccd){ return; }
-            
-            ccd->last_activity_time = time(nullptr);
-        
-            manager.addClient(*ccd);
-            
-            //manager.pmanager....
-            //manager.getClientData();
-            
-            // ... next ...
-
-        } catch(const std::exception& e) {
-            log::err(std::string("Client error: ") + e.what());
-            close(client_data.desc);
-            
-        }
-    }
     bool startSocketServer() {
         if(isActive) return false;
         socket_desc = socket(AF_INET, SOCK_STREAM, 0);
@@ -244,29 +186,29 @@ class hostManager{
 
         log::def("server start, port " + std::to_string(manager.serverConfigure.port));
         isActive = true;
-        
+
         while(isActive) {
-            
+
             sockaddr_in clientAddr;
             socklen_t clientAddrSize = sizeof(clientAddr);
             int clientSocket = (manager.getClientConnectionsCount() < manager.serverConfigure.maxClients)? accept(socket_desc, (sockaddr*)&clientAddr, &clientAddrSize) : STATUS_SYSTEM_OPERATION_ERROR;
-            
+   
             if(clientSocket == STATUS_SYSTEM_OPERATION_ERROR) {
                 log::warn("Error accepting connection");
                 continue;
             }
-
+  
             time_t now = time(nullptr);
-            client_packet_raw header;
+            client_head_packet_raw header;
             
-            
+          
             if(recv(clientSocket, &header, sizeof(header), MSG_WAITALL) != sizeof(header)) {
                 log::warn("Failed to read client header");
                 close(clientSocket);
                 continue;
             }
 
-            
+          
             char session_key[20] = {0};
             strncpy(session_key, header.client_sey, sizeof(header.client_sey));
             
@@ -277,19 +219,56 @@ class hostManager{
                 clientSocket,
                 clientAddr
             );
-            
+            hex_t clien_hex = hex_t(new_client);
+                
             if(!manager.addClient(new_client)) {
                 log::warn("Failed to add client to manager");
                 close(clientSocket);
                 continue;
             }
-            std::thread([this, new_client, packet = header]() {
-                this->handleClient(new_client, packet);
+            manager.newClientConnection(clien_hex);
+            std::thread([this, clien_hex]() {
+                this->handleClient(clien_hex);
             }).detach();
 
             
         } log::def("stoped socket server");
         return true;
+    }
+    void handleClient(hex_t client_hex) {
+        try {
+            auto ccd = manager.getClient(client_hex);   
+            if(!ccd) return; 
+            ccd->last_activity_time = time(nullptr);
+            manager.addClient(*ccd);
+            
+            while (isActive){
+                packet_s packet;
+                if(recv(ccd->desc, &packet, sizeof(packet), MSG_WAITALL) != sizeof(packet)) {
+                    std::this_thread::sleep_for(std::chrono::microseconds(10));
+                    continue;
+                }
+    
+                    
+                uint16_t size = (packet.datasize[1] << 8) | packet.datasize[0];
+                std::vector<uint8_t> data(size);
+                if(recv(ccd->desc, data.data(), size, MSG_WAITALL) != size) {
+                    log::warn("Failed to read packet data");
+                    continue;
+                }
+
+                manager.getClientData(client_hex, data);
+            }
+            
+            //manager.pmanager....
+            //manager.getClientData();
+            
+            // ... next ...
+
+        } catch(const std::exception& e) {
+            log::err(std::string("Client error: ") + e.what());
+            
+        }
     }
     bool reStartSocketServer(){
         stopSocketServer();

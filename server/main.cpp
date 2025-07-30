@@ -8,9 +8,16 @@ public:
     MyServerManager() : serverManager(serverConfigureController::getConfigFropPath(confpathp)) {
         
     }
-    
-    void getClientData(hex_t client_hex, const std::vector<uint8_t>& data) override {
+    void newClientConnection(hex_t client_hex) override {
+        std::cout<<"newCLIENT!"<<std::endl;
+    }
 
+    void getClientData(hex_t client_hex, const std::vector<uint8_t>& data) override {
+        std::cout<<"get:";
+        for(auto bite : data){
+            std::cout<<std::hex<<bite;
+        }
+        std::cout<<std::endl;
     }
 
 };
