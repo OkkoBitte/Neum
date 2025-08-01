@@ -5,7 +5,7 @@ struct server_configure {
     int maxSleepClients;  // max seconds client passiving
 
     int maxGetClientPacket; // max packet size of client data
-
+    int maxRetySendingPacket; // max retying packet 
     std::string pathClientsData; // path where saving/uploading clinet data
 };
 struct req10_t { // option form
@@ -130,6 +130,7 @@ struct packet_s{
 };
 struct packContoll{
     int time;
+    int retry_count;
     packet_s packet_head;
     std::vector<uint8_t> data;
 };

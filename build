@@ -1,0 +1,4 @@
+#!/usr/bin/bash
+
+clang++ -Ilibs server/main.cpp -o _server
+#clang++ -Ilibs client/main.cpp -o _client

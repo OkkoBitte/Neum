@@ -48,7 +48,7 @@ namespace serverConfigureController{
         retconf.sleepClients = 10;
         retconf.maxSleepClients = 20;
         retconf.maxGetClientPacket = 1000000;
-        
+        retconf.maxRetySendingPacket = 10;
 
         bool hasPort = false;
         bool hasPathClientsData = false;
@@ -100,6 +100,15 @@ namespace serverConfigureController{
                     std::exit(STATUS_OPERATION_ERROR);
                 }
             }
+            else if (var.name == "maxRetySendingPacket"){
+                if (var.valib.type == VSID::intV){
+                    retconf.maxRetySendingPacket = atoi(var.valib.value.c_str());
+                }
+                else{
+                    log::err("var 'maxRetySendingPacket' need type INT");
+                    std::exit(STATUS_OPERATION_ERROR);
+                }
+            }
             else if (var.name == "pathClientsData"){
                 if (var.valib.type == VSID::stringV){
                     retconf.pathClientsData = var.valib.value;
@@ -139,8 +148,8 @@ uint8_t generate_random_byte() {
 
 namespace PacketController{
     class packetManager{
-        //std::vector<packContoll> isHe; // he packet which get
-        std::vector<packContoll> isMy; // my packet which send
+        
+        std::vector<packContoll> isMy; 
         
         std::vector<packetActions> actions;
         /*
@@ -150,6 +159,7 @@ namespace PacketController{
         */
 
         public:
+            std::optional<server_configure> sconf;
             void postHe(packet_s &packet, std::vector<uint8_t> &data){
                 
                 if (*packet.type == packet_type::menegmend) { // [ACK]
@@ -206,10 +216,12 @@ namespace PacketController{
                 pactoin.action = action_e::send_data;
 
                 packContoll newPcoll;
+                newPcoll.time = time(nullptr);
                 newPcoll.packet_head = packet;
                 newPcoll.data = data;
 
                 pactoin.packet = newPcoll;
+                isMy.push_back(newPcoll);
                 actions.push_back(pactoin);
             };
 
@@ -217,9 +229,39 @@ namespace PacketController{
 
             };
 
-            packetActions managment_packets(){
-                packetActions return_d;
-                return return_d;
+            std::vector<packetActions> managment_packets() {
+                std::vector<packetActions> acp;
+                acp.swap(actions); 
+                
+                time_t current_time = time(nullptr);
+                auto it = isMy.begin();
+                
+                while(it != isMy.end()) {
+                    
+                    uint8_t timeout_seconds = it->packet_head.timeout[0];
+                    
+                    if((current_time - it->time) > timeout_seconds) {
+                        if(it->retry_count < (sconf?sconf->maxRetySendingPacket:5)) {
+                            
+                            it->time = current_time;
+                            it->retry_count++;
+                            
+                            
+                            packetActions pact;
+                            pact.action = action_e::send_data;
+                            pact.packet = *it;
+                            acp.push_back(pact);
+                            
+                            ++it;
+                        } else {
+                            it = isMy.erase(it);
+                        }
+                    } else {
+                        ++it;
+                    }
+                }
+                
+                return acp;
             }
     };
 }

@@ -1,5 +1,5 @@
 #include <includelib.hpp>
-#include "center.cpp"
+#include "center.hpp"
 
 std::string confpathp;
 
