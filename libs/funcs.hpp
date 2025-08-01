@@ -1,5 +1,3 @@
-
-
 namespace SeyController{
     class seyManager{   
         private:
@@ -130,10 +128,98 @@ namespace serverConfigureController{
 
 
 
+uint8_t generate_random_byte() {
 
+    static std::random_device rd;  
+    static std::mt19937 gen(rd());
+    static std::uniform_int_distribution<> dis(0, 255); 
+    
+    return static_cast<uint8_t>(dis(gen)); 
+}
 
 namespace PacketController{
     class packetManager{
+        //std::vector<packContoll> isHe; // he packet which get
+        std::vector<packContoll> isMy; // my packet which send
         
+        std::vector<packetActions> actions;
+        /*
+            тут нужно решить какому пакету отправить подтверждение
+            когда переотправить пакет
+            когда сказать выше о том, что пора закончить соединение
+        */
+
+        public:
+            void postHe(packet_s &packet, std::vector<uint8_t> &data){
+                
+                if (*packet.type == packet_type::menegmend) { // [ACK]
+                    isMy.erase(
+                        std::remove_if(
+                            isMy.begin(),
+                            isMy.end(),
+                            [&packet](const packContoll& pc) {
+                                return memcmp(pc.packet_head.hxcode, packet.hxcode, sizeof(packet.hxcode)) == 0;
+                            }
+                        ),
+                        isMy.end()
+                    );
+                }
+                else if(*packet.type == packet_type::control){ 
+                    if (!data.empty()){
+                        if (data.front() == packet_controll::close){
+                            actions.push_back(packetActions({action_e::close_client,{}}));
+                        }  
+                    }
+                }
+                else if(*packet.type == packet_type::data){
+                    packet_s packetHead;
+                    packContoll pcoll;
+                    packetActions pactoin;
+         
+                    packetHead.type     [0] = packet_type::menegmend;
+                    packetHead.hxcode   [0] = packet.hxcode[0];
+                    packetHead.hxcode   [1] = packet.hxcode[1];
+                    packetHead.datasize [0] = 0x00;
+                    packetHead.datasize [1] = 0x00;
+                    
+                    pcoll.time = static_cast<int>(std::time(nullptr));
+                    pcoll.packet_head=packetHead; 
+                    pcoll.data = {};
+                    
+                    pactoin.action = action_e::send_data;
+                    pactoin.packet = pcoll;
+
+                    actions.push_back(pactoin);
+
+                    packetActions newActoin;
+                    packContoll newPcoll;
+                    newPcoll.packet_head = packet;
+                    newPcoll.data = data;
+                    newActoin.action = action_e::get_data;
+                    newActoin.packet = newPcoll;
+                    actions.push_back(newActoin);
+                } 
+
+            };
+            void postMy(packet_s &packet, std::vector<uint8_t> &data){
+                packetActions pactoin;
+                pactoin.action = action_e::send_data;
+
+                packContoll newPcoll;
+                newPcoll.packet_head = packet;
+                newPcoll.data = data;
+
+                pactoin.packet = newPcoll;
+                actions.push_back(pactoin);
+            };
+
+            void sendInfoClose(uint8_t why){
+
+            };
+
+            packetActions managment_packets(){
+                packetActions return_d;
+                return return_d;
+            }
     };
 }

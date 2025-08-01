@@ -92,6 +92,26 @@ struct client_head_packet_raw{
 
 };
 
+struct close_connection_info{
+    const static uint8_t error    = 0x01;
+    const static uint8_t myerror  = 0x02;
+    const static uint8_t youerror = 0x03;
+    
+    const static uint8_t donn     = 0x11;
+    const static uint8_t mydonn   = 0x12;
+    const static uint8_t youdonn  = 0x13;
+};
+
+struct packet_type{
+    const static uint8_t menegmend = 0x01; // packets info -- ok/bad
+    const static uint8_t control   = 0x02; // close connection
+    const static uint8_t data      = 0x03; // data
+};
+
+struct packet_controll{
+    const static uint8_t close = 0xff;
+};
+
 struct packet_s{
     uint8_t type[1];       // 0
     uint8_t hxcode[2];     // 1-2
@@ -99,4 +119,24 @@ struct packet_s{
     uint8_t datasize[2];   // 4-5
                            // 6++
 
+    bool operator<(const packet_s& other) const {
+        
+        if (int cmp = memcmp(type, other.type, sizeof(type))) return cmp < 0;
+        if (int cmp = memcmp(hxcode, other.hxcode, sizeof(hxcode))) return cmp < 0;
+        if (int cmp = memcmp(timeout, other.timeout, sizeof(timeout))) return cmp < 0;
+        if (int cmp = memcmp(datasize, other.datasize, sizeof(datasize))) return cmp < 0;
+        return false;
+    }
+};
+struct packContoll{
+    int time;
+    packet_s packet_head;
+    std::vector<uint8_t> data;
+};
+enum action_e{
+    close_client, get_data, send_data
+};
+struct packetActions{
+    action_e action;
+    packContoll packet;
 };

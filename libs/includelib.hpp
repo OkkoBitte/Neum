@@ -29,6 +29,8 @@
 #include <thread>
 #include <atomic>
 #include <csignal>
+#include <optional>
+#include <random>
 
 #include "binlib.hpp"
 

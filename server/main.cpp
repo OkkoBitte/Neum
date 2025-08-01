@@ -1,5 +1,5 @@
 #include <includelib.hpp>
-#include "center.hpp"
+#include "center.cpp"
 
 std::string confpathp;
 
@@ -9,7 +9,8 @@ public:
         
     }
     void newClientConnection(hex_t client_hex) override {
-        std::cout<<"newCLIENT!"<<std::endl;
+        auto client = getClient(client_hex);
+        std::cout<<"CONNECTED: "<< client->sey.sey_main <<" ["<<client->desc<< "]" <<std::endl;
     }
 
     void getClientData(hex_t client_hex, const std::vector<uint8_t>& data) override {
