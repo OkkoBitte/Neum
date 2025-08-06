@@ -11,6 +11,11 @@ public:
     void newClientConnection(hex_t client_hex) override {
         auto client = getClient(client_hex);
         std::cout<<"CONNECTED: "<< client->sey.sey_main <<" ["<<client->desc<< "]" <<std::endl;
+        std::vector<uint8_t> data;
+
+        data.push_back({0x62});
+        data.push_back({0x62});
+        sendData(client_hex,data);
     }
 
     void getClientData(hex_t client_hex, const std::vector<uint8_t>& data) override {

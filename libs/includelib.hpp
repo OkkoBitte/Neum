@@ -31,6 +31,7 @@
 #include <csignal>
 #include <optional>
 #include <random>
+#include <netdb.h>
 
 #include "binlib.hpp"
 

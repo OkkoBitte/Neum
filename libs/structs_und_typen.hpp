@@ -11,7 +11,9 @@ struct server_configure {
 struct req10_t { // option form
     uint8_t code1, code2, code3, code4, code5, code6, code7, code8, code9, code10;
     uint8_t full[10];
-
+    req10_t() : full{0} {
+        code1 = code2 = code3 = code4 = code5 = code6 = code7 = code8 = code9 = code10 = 0;
+    }
     req10_t(const uint8_t options[10]) {
         for (int i = 0; i < 10; ++i) {
             full[i] = options[i];
@@ -44,13 +46,26 @@ struct req10_t { // option form
 
 };
   
+
+
+
+
 struct sey_t{ // session key
     char sey_main[20];
-    
+    sey_t() : sey_main{0}{};
     sey_t(char   sey[20]){ memcpy(sey_main, sey, 20); }
 
     bool operator==(sey_t &other) const { return strncmp(sey_main, other.sey_main, 20) == 0; }
     
+};
+
+
+struct client_configure{
+    std::string hostname;
+    int port;
+
+    req10_t options;
+    sey_t sey;
 };
 
 struct client_connection_data {

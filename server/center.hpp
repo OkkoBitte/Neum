@@ -284,7 +284,9 @@ bool hostManager::startSocketServer() {
             close(clientSocket);
             continue;
         }
-        
+        PacketController::packetManager pmanager;
+        pmanager.sconf = manager->serverConfigure;
+        putClienPcm(client_hex, pmanager);
         manager->newClientConnection(client_hex);
         std::thread([this, client_hex]() {
             this->handleClient(client_hex);
@@ -303,12 +305,17 @@ void hostManager::handleClient(hex_t client_hex) {
         ccd->last_activity_time = time(nullptr);
         manager->addClient(*ccd);
         
-        PacketController::packetManager pmanager;
-        pmanager.sconf = manager->serverConfigure;
-        putClienPcm(client_hex, pmanager);
+
         bool HandleClient = true;
+        PacketController::packetManager *pmanager = getClienPcm(client_hex);
+        
+        if(pmanager == nullptr){
+            log::err("dont find client packet manager from he handling");
+            throw;
+        }
+
         while (isActive && HandleClient) {
-            std::vector<packetActions> pactos = pmanager.managment_packets();
+            std::vector<packetActions> pactos = pmanager->managment_packets();
 
             for (auto act : pactos){
                 if(act.action == action_e::close_client){
@@ -358,14 +365,31 @@ void hostManager::handleClient(hex_t client_hex) {
                 continue;
             }
             
-            pmanager.postHe(packet, data);
+            pmanager->postHe(packet, data);
             
         }
     } catch (const std::exception& e) {
         log::err(std::string("Client error: ") + e.what());
     }
 }
+void serverManager::sendData(hex_t clientHx, std::vector<uint8_t> data){
+    
+    PacketController::packetManager* pm =  hmanager->getClienPcm(clientHx);
 
+    if(pm){
+        size_t data_size = data.size();
+        packet_s phead;
+        phead.type[0] = packet_type::data;
+        phead.hxcode[0] = generate_random_byte();
+        phead.hxcode[1] = generate_random_byte();
+        phead.datasize[0] = static_cast<uint8_t>(data_size & 0xFF);        
+        phead.datasize[1] = static_cast<uint8_t>((data_size >> 8) & 0xFF); 
+        pm->postMy(phead,data);
+    }
+    else{
+        log::err ("Dont get client from send data");
+    }
+}
 bool hostManager::stopSocketServer() {
     std::string wtxt = "stopping host in port " + std::to_string(manager->serverConfigure.port);
     log::warn(wtxt);
@@ -380,8 +404,4 @@ bool hostManager::stopSocketServer() {
 bool hostManager::reStartSocketServer() {
     stopSocketServer();
     return startSocketServer();
-}
-
-void hostManager::processIncomingData(hex_t client_hex, const std::vector<uint8_t>& data) {
-
 }

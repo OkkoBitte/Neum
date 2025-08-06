@@ -152,11 +152,7 @@ namespace PacketController{
         std::vector<packContoll> isMy; 
         
         std::vector<packetActions> actions;
-        /*
-            тут нужно решить какому пакету отправить подтверждение
-            когда переотправить пакет
-            когда сказать выше о том, что пора закончить соединение
-        */
+
 
         public:
             std::optional<server_configure> sconf;
