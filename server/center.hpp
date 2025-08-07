@@ -175,7 +175,7 @@ void serverManager::MENEGMANT_CLIENTS() {
                 purgeClient_unsafe(hex);
             }
         } else {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
         when = (when > 9999) ? 0 : when + 1;
     }
@@ -304,6 +304,7 @@ void hostManager::handleClient(hex_t client_hex) {
         
         ccd->last_activity_time = time(nullptr);
         manager->addClient(*ccd);
+        
         
 
         bool HandleClient = true;

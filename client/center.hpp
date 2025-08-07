@@ -6,6 +6,8 @@ public:
     virtual ~clientManager() = default;
     virtual void getData(std::vector<uint8_t>) = 0;
     
+    virtual void connected() = 0 ;
+
     void sendData(std::vector<uint8_t> data) {
         size_t data_size = data.size();
         packet_s phead;
@@ -14,22 +16,29 @@ public:
         phead.hxcode[1] = rand() % 256;
         phead.datasize[0] = static_cast<uint8_t>(data_size & 0xFF);
         phead.datasize[1] = static_cast<uint8_t>((data_size >> 8) & 0xFF);
+        std::lock_guard<std::mutex> lock(pmut);
         pmanager.postMy(phead, data);
     }
-
+    void loop();
     client_configure& config;
+    std::mutex pmut;
     PacketController::packetManager pmanager;
 
 protected:
     clientManager(client_configure& conf) : config(conf) {}
+    
 };
 
 class hostManager {
 public:
     hostManager(clientManager* manager) : manager(manager) {
-        if (!connect()) {
-            throw std::runtime_error("Connection failed");
-        }
+        std::thread cnn([&](){
+
+            if (!connect()) throw std::runtime_error("Connection failed");
+            
+        });
+        cnn.detach();
+        
     }
 
     ~hostManager() {
@@ -116,6 +125,9 @@ private:
     }
 
     void startCommunication() {
+        std::thread cll([&](){manager->connected();});
+        cll.detach();
+
         while (workojob) {
             std::vector<packetActions> pactos = manager->pmanager.managment_packets();
 
@@ -163,3 +175,9 @@ private:
         log::def("Connection closed");
     }
 };
+
+void clientManager::loop() { 
+    while (true) { 
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+}
