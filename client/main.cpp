@@ -7,7 +7,10 @@ public:
     myApp(client_configure& conf) : clientManager(conf), host(std::make_unique<hostManager>(this)) {}
     
     void connected() override {
-        std::cout << "Connected successfully!" << std::endl;
+        std::string text= "hello im client";
+        std::vector<uint8_t> data(text.begin(), text.end());
+        std::cout<<"SEND:"<<text<<std::endl;
+        sendData(data);
         
         for (int t = 0; t < 10; t++) {
             std::cout << "Enter message (" << (t+1) << "/10): ";
@@ -25,19 +28,30 @@ public:
         }
         std::cout << std::endl;
     }
+    void closeConnection()override{
+        std::cout<<"CLOSE"<<std::endl;
 
+    }
 private:
     std::unique_ptr<hostManager> host;
 };
 
-int main() {
+int main(int argc, char* argv[]) {
     client_configure cf;
-    cf.hostname = "localhost";
-    cf.port = 3334;
+    if(argc > 2){
+        cf.hostname = argv[1];
+        cf.port = atoi(argv[2]);
+    }
+    else{
+        cf.hostname = "localhost";
+        cf.port = 3333;
+    }
+    
+    
 
     uint8_t opts[10] = {};
     opts[0] = 0x01; // new
-    opts[2] = 0xFF; // 256
+    opts[2] = 0x0A; // 256
     cf.options = req10_t(opts);
 
     char msey[20] = "LoreLoracrateEinzAd";

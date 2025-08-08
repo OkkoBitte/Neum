@@ -7,13 +7,14 @@ public:
     virtual void getData(std::vector<uint8_t>) = 0;
     
     virtual void connected() = 0 ;
-
+    virtual void closeConnection()=0;
     void sendData(std::vector<uint8_t> data) {
         size_t data_size = data.size();
         packet_s phead;
         phead.type[0] = packet_type::data;
         phead.hxcode[0] = rand() % 256;
         phead.hxcode[1] = rand() % 256;
+        phead.timeout[0] = 0x0A;
         phead.datasize[0] = static_cast<uint8_t>(data_size & 0xFF);
         phead.datasize[1] = static_cast<uint8_t>((data_size >> 8) & 0xFF);
         std::lock_guard<std::mutex> lock(pmut);
@@ -117,64 +118,93 @@ private:
         memcpy(chpr.client_options, manager->config.options.full, sizeof(chpr.client_options));
         memcpy(chpr.client_sey, manager->config.sey.sey_main, sizeof(chpr.client_sey));
 
-        if (send(sockfd, &chpr, sizeof(chpr), 0) != sizeof(chpr))         log::warn("Failed to send header");
-    
+        if (send(sockfd, &chpr, sizeof(chpr), MSG_WAITALL) != sizeof(chpr))  { 
+            log::warn("Failed to send client header");
+        }
+        // std::thread cdl([&](){getServerData();});
+        // cdl.detach();
         
         startCommunication();
         return true;
     }
 
     void startCommunication() {
-        std::thread cll([&](){manager->connected();});
-        cll.detach();
+        std::thread cdl([&](){ manager->connected(); });
+        cdl.detach();
+
+        
+        int flag = 1;
+        setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+
+        
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 500000;
+        setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
         while (workojob) {
-            std::vector<packetActions> pactos = manager->pmanager.managment_packets();
-
-            for (auto& act : pactos) {
-                if (act.action == action_e::close_client) {
-                    workojob = false;
-                    break;
-                }
-                else if (act.action == action_e::get_data) {
-                    manager->getData(act.packet.data);
-                }
-                else if (act.action == action_e::send_data) {
-                    packet_s head = act.packet.packet_head;
-                    std::vector<uint8_t> data = act.packet.data;
-                    
-                    if (send(sockfd, &head, sizeof(head), 0) != sizeof(head)) {
-                        log::warn("Failed to send packet header");
-                        continue;
-                    }
-                    
-                    if (!data.empty() && send(sockfd, data.data(), data.size(), 0) != data.size()) {
-                        log::warn("Failed to send packet data");
-                        continue;
-                    }
-                }
-            }
-
-            packet_s packet;
-            if (recv(sockfd, &packet, sizeof(packet), MSG_WAITALL) != sizeof(packet)) {
-                std::this_thread::sleep_for(std::chrono::microseconds(1));
-                continue;
-            }
-
-            uint16_t size = (packet.datasize[1] << 8) | packet.datasize[0];
-            std::vector<uint8_t> data(size);
             
-            if (size > 0 && recv(sockfd, data.data(), size, MSG_WAITALL) != size) {
-                log::warn("Failed to read packet data");
-                continue;
+            std::vector<packetActions> pactos = manager->pmanager.managment_packets();
+            for (auto& act : pactos) {
+                switch (act.action) {
+                    case action_e::close_client:
+                        workojob = false;
+                        manager->closeConnection();
+                        break;
+                        
+                    case action_e::get_data:
+                        manager->getData(act.packet.data);
+                        break;
+                        
+                    case action_e::send_data: {
+                        std::vector<uint8_t> full_packet;
+                        full_packet.reserve(sizeof(packet_s) + act.packet.data.size());
+                        full_packet.insert(full_packet.end(), 
+                                        (uint8_t*)&act.packet.packet_head, 
+                                        (uint8_t*)&act.packet.packet_head + sizeof(packet_s));
+                        full_packet.insert(full_packet.end(), 
+                                        act.packet.data.begin(), 
+                                        act.packet.data.end());
+                        send(sockfd, full_packet.data(), full_packet.size(), 0);
+                        break;
+                    }
+                }
             }
-                
-            manager->pmanager.postHe(packet, data);
+
+            
+            fd_set read_fds;
+            FD_ZERO(&read_fds);
+            FD_SET(sockfd, &read_fds);
+            
+            struct timeval select_tv = {0, 10000};
+            
+            if (select(sockfd + 1, &read_fds, NULL, NULL, &select_tv) > 0) {
+                if (FD_ISSET(sockfd, &read_fds)) {
+                    packet_s packet;
+                    ssize_t received = recv(sockfd, &packet, sizeof(packet), MSG_WAITALL);
+                    
+                    if (received == sizeof(packet)) {
+                        uint16_t size = (packet.datasize[1] << 8) | packet.datasize[0];
+                        if (size > 0) {
+                            std::vector<uint8_t> data(size);
+                            if (recv(sockfd, data.data(), size, MSG_WAITALL) == size) {
+                                manager->pmanager.postHe(packet, data);
+                            }
+                        }
+                    } else if (received == 0) {
+                        log::def("Server closed connection");
+                        workojob = false;
+                    }
+                }
+            }
         }
 
         log::def("Connection closed");
     }
+
 };
+
+
 
 void clientManager::loop() { 
     while (true) { 

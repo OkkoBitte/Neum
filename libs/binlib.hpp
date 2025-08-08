@@ -1,8 +1,8 @@
 #define NULL_STR ""
 
-#define VERSION_CODE 30
-#define VERSION_NAME_SERVER "0.1.0-release"
-#define VERSION_NAME_CLIENT "0.1.0-release"
+#define VERSION_CODE 34
+#define VERSION_NAME_SERVER "0.1.0-release[guard]"
+#define VERSION_NAME_CLIENT "0.1.0-release[guard]"
 
 
 
@@ -15,4 +15,4 @@ static constexpr const char* BIN__KRR__CONF      = "0";
 static constexpr const char* FO__KRR__CONF       = "-1";
 
 const std::string help1_server = "|[Neum:V][HELP] server config.krr   \n\n\tfor get more data --describe\n\tfor get help --help\n";
-std::string help2_server = "|[Neum:V][DESCRIBE] \n\n\tVersion Code "+std::to_string(VERSION_CODE)+"\n\tVersion Name"+VERSION_NAME_SERVER+"\n\n More web-mbg.ru";
+std::string help2_server = "|[Neum:V][DESCRIBE] \n\n\tVersion Code "+std::to_string(VERSION_CODE)+"\n\tVersion Name"+VERSION_NAME_SERVER+"\n\n More web-mbg.ru\n\n";

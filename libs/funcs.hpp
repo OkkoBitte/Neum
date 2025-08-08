@@ -222,6 +222,25 @@ namespace PacketController{
             };
 
             void sendInfoClose(uint8_t why){
+                packet_s packetHead;
+                packContoll pcoll;
+                packetActions pactoin;
+        
+                packetHead.type     [0] = packet_type::control;
+                packetHead.hxcode   [0] = 0x00;
+                packetHead.hxcode   [1] = 0x00;
+                packetHead.datasize [0] = 0x01;
+                packetHead.datasize [1] = 0x00;
+                
+                pcoll.time = static_cast<int>(std::time(nullptr));
+                pcoll.packet_head=packetHead; 
+                pcoll.data = {why};
+                
+                pactoin.action = action_e::close_client;
+                pactoin.packet = pcoll;
+
+                actions.push_back(pactoin);
+
 
             };
 

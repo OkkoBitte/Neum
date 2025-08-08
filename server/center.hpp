@@ -5,9 +5,11 @@ public:
     virtual ~hostManagerInterface() = default;
     virtual void putClienPcm(hex_t hexCode, PacketController::packetManager& pcol) = 0;
     virtual PacketController::packetManager* getClienPcm(hex_t hexCode) = 0;
+    virtual  void deleteClientPcm(hex_t hexCode) =0;
     virtual bool startSocketServer() = 0;
     virtual bool stopSocketServer() = 0;
     virtual void handleClient(hex_t client_hex) = 0;
+    std::mutex map_mutex;
 };
 
 class serverManager {
@@ -29,6 +31,7 @@ public:
     virtual ~serverManager() = default;
     virtual void newClientConnection(hex_t client_hex) = 0;
     virtual void getClientData(hex_t client_hex, const std::vector<uint8_t>& data) = 0;
+    
 
     void sendData(hex_t clientHx, std::vector<uint8_t> data);
     bool addClient(const client_connection_data& newData);
@@ -48,14 +51,15 @@ private:
     int socket_desc;
     std::atomic<bool> isActive{false};
     std::map<hex_t, PacketController::packetManager> packe_manager;
-    std::mutex map_mutex;
+
 
 public:
     hostManager(serverManager* mgr);
     ~hostManager() override;
-
+    std::mutex map_mutex;
     void putClienPcm(hex_t hexCode, PacketController::packetManager& pcol) override;
     PacketController::packetManager* getClienPcm(hex_t hexCode) override;
+    void deleteClientPcm(hex_t hexCode) override;
     bool startSocketServer() override;
     bool stopSocketServer() override;
     void handleClient(hex_t client_hex) override;
@@ -103,6 +107,14 @@ bool serverManager::purgeClient_unsafe(hex_t hexClient) {
         }
 
         virtual_connections.erase(it);
+
+        PacketController::packetManager *pm = hmanager->getClienPcm(hexClient);
+
+        if(pm){
+            pm->sendInfoClose(close_connection_info::youerror);
+        }
+
+
         return true;
     } catch (const std::exception& e) {
         std::cerr << "Error in purge: " << e.what() << std::endl;
@@ -114,6 +126,11 @@ bool serverManager::dltClient_unsafe(hex_t hexClient) {
     auto it = virtual_connections.find(hexClient);
     if (it == virtual_connections.end()) return false;
     virtual_connections.erase(it);
+    PacketController::packetManager *pm = hmanager->getClienPcm(hexClient);
+
+    if(pm){
+        pm->sendInfoClose(close_connection_info::youerror);
+    }
     return true;
 }
 
@@ -147,37 +164,60 @@ size_t serverManager::getClientConnectionsCount() {
     std::lock_guard<std::mutex> lock(map_mutex);
     return virtual_connections.size();
 }
-
 void serverManager::MENEGMANT_CLIENTS() {
-    int when = 0;
-    while (work) {
-        if ((when % 5) != 0) {
-            std::lock_guard<std::mutex> lock(map_mutex);
-            
-            std::vector<hex_t> to_remove;
-            for (const auto& [hex, data] : virtual_connections) {
-                req10_t co = data.client_options;
-                time_t now = time(nullptr);
 
-                if ((now - data.last_activity_time) > serverConfigure.sleepClients) {
-                    if (co.code3 == 0x00 || 
-                        ((now - data.last_activity_time) > int(co.code3) && 
-                        (int(co.code3) > serverConfigure.maxSleepClients))) {
-                        to_remove.push_back(hex);
-                        std::string log_data = "PURGE TIMEOUT: " + std::string(data.sey.sey_main) + 
-                                             " [" + std::to_string(data.desc) + "]";
-                        log::warn(log_data);
-                    }
-                }
-            }
+    constexpr int SLEEP_MS = 1000;
+    
+    while (work) {
+        auto start_time = std::chrono::steady_clock::now();
         
-            for (const auto& hex : to_remove) {
+      
+        std::vector<std::tuple<hex_t, req10_t, time_t, sey_t, int>> clients_data;
+        {
+            std::lock_guard<std::mutex> lock(map_mutex);
+            clients_data.reserve(virtual_connections.size());
+            for (const auto& [hex, data] : virtual_connections) {
+                clients_data.emplace_back(hex, data.client_options, 
+                                        data.last_activity_time, 
+                                        data.sey, 
+                                        data.desc);
+            }
+        }
+
+       
+        std::vector<hex_t> to_purge;
+        const time_t now = time(nullptr);
+        const int sleep_threshold = serverConfigure.sleepClients;
+        const int max_sleep_threshold = serverConfigure.maxSleepClients;
+
+        for (const auto& [hex, co, last_activity, sey, desc] : clients_data) {
+            const time_t inactive_time = now - last_activity;
+            
+            if (inactive_time > sleep_threshold && 
+                (co.code3 == 0x00 || (inactive_time > static_cast<int>(co.code3) && 
+                 static_cast<int>(co.code3) > max_sleep_threshold))) {
+                to_purge.push_back(hex);
+                log::warn("PURGE TIMEOUT: " + std::string(sey.sey_main) + 
+                        " [" + std::to_string(desc) + "]");
+            }
+        }
+
+        
+        if (!to_purge.empty()) {
+            std::lock_guard<std::mutex> lock(map_mutex);
+            for (const auto& hex : to_purge) {
                 purgeClient_unsafe(hex);
             }
-        } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
-        when = (when > 9999) ? 0 : when + 1;
+
+        
+        auto elapsed = std::chrono::steady_clock::now() - start_time;
+        auto sleep_duration = std::chrono::milliseconds(SLEEP_MS) - 
+                            std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
+        
+        if (sleep_duration.count() > 0) {
+            std::this_thread::sleep_for(sleep_duration);
+        }
     }
 }
 
@@ -215,7 +255,11 @@ PacketController::packetManager* hostManager::getClienPcm(hex_t hexCode) {
     auto it = packe_manager.find(hexCode);
     return it != packe_manager.end() ? &it->second : nullptr;
 }
-
+void  hostManager::deleteClientPcm(hex_t hexCode){
+    std::lock_guard<std::mutex> lock(map_mutex);
+    auto it = packe_manager.find(hexCode);
+    if(it != packe_manager.end())  packe_manager.erase(it) ;
+}
 bool hostManager::startSocketServer() {
     if (isActive) return false;
     
@@ -296,95 +340,112 @@ bool hostManager::startSocketServer() {
     log::def("stopped socket server");
     return true;
 }
-
 void hostManager::handleClient(hex_t client_hex) {
     try {
         auto ccd = manager->getClient(client_hex);   
-        if (!ccd) return; 
-        
-        ccd->last_activity_time = time(nullptr);
-        manager->addClient(*ccd);
-        
-        
-
-        bool HandleClient = true;
-        PacketController::packetManager *pmanager = getClienPcm(client_hex);
-        
-        if(pmanager == nullptr){
-            log::err("dont find client packet manager from he handling");
-            throw;
+        if (!ccd) return;
+        int maxPacketSize = manager->serverConfigure.maxGetClientPacket;
+        PacketController::packetManager* pmanager = getClienPcm(client_hex);
+        if (!pmanager) {
+            log::err("Client packet manager not found");
+            return;
         }
 
-        while (isActive && HandleClient) {
-            std::vector<packetActions> pactos = pmanager->managment_packets();
+    
+        int flag = 1;
+        setsockopt(ccd->desc, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
 
-            for (auto act : pactos){
-                if(act.action == action_e::close_client){
-                    HandleClient = false;
-                    manager->purgeClient(client_hex);
-                    break;
+        while (isActive) {
+            std::vector<packetActions> pactos = pmanager->managment_packets();
+            for (auto& act : pactos) {
+                if (act.action == action_e::close_client) {
+                    log::def("Closing client "+std::to_string(ccd->desc));
+                    deleteClientPcm(client_hex);
+                    return;
                 }
-                else if(act.action == action_e::get_data){
+                else if (act.action == action_e::get_data) {
                     manager->getClientData(client_hex, act.packet.data);
                 }
-                else if(act.action == action_e::send_data){
-                    packet_s head = act.packet.packet_head;
-                    std::vector<uint8_t> data = act.packet.data;
-                    
-                  
-                    if(send(ccd->desc, &head, sizeof(head), 0) != sizeof(head)) {
-                        log::warn("Failed to send packet header");
-                        continue;
-                    }
-                    
-                
-                    if(!data.empty()) {
-                        if(send(ccd->desc, data.data(), data.size(), 0) != data.size()) {
-                            log::warn("Failed to send packet data");
-                            continue;
-                        }
-                    }
+                else if (act.action == action_e::send_data) {
+    
+                    std::vector<uint8_t> full_packet;
+                    full_packet.insert(full_packet.end(), 
+                                     (uint8_t*)&act.packet.packet_head, 
+                                     (uint8_t*)&act.packet.packet_head + sizeof(packet_s));
+                    full_packet.insert(full_packet.end(), 
+                                     act.packet.data.begin(), 
+                                     act.packet.data.end());
+                    send(ccd->desc, full_packet.data(), full_packet.size(), 0);
                 }
             }
 
+            fd_set read_fds;
+            FD_ZERO(&read_fds);
+            FD_SET(ccd->desc, &read_fds);
+            struct timeval tv = {0, 10000};
+
+            if (select(ccd->desc + 1, &read_fds, NULL, NULL, &tv) <= 0) {
+                continue;
+            }
 
             packet_s packet;
+            ssize_t received = recv(ccd->desc, &packet, sizeof(packet), MSG_WAITALL);
             
-            if (recv(ccd->desc, &packet, sizeof(packet), MSG_WAITALL) != sizeof(packet)) {
-                std::this_thread::sleep_for(std::chrono::microseconds(1));
-                continue;
+            if (received <= 0) {
+                if (received == 0) {
+                    log::def("Client disconnected: "+std::to_string(ccd->desc));
+                } else {
+                    log::warn("Receive error: "+std::to_string(errno));
+                }
+                break;
             }
 
+        \
             ccd->last_activity_time = time(nullptr);
-            manager->addClient(*ccd);
+            manager->mdfClient(client_hex, *ccd);
 
+          
             uint16_t size = (packet.datasize[1] << 8) | packet.datasize[0];
-            std::vector<uint8_t> data(size);
-            
-            if (recv(ccd->desc, data.data(), size, MSG_WAITALL) != size) {
-                log::warn("Failed to read packet data");
-                continue;
+            if (size > 0) {
+                if (size > maxPacketSize) {
+                    log::err("Packet too large: "+std::to_string(size));
+                    break;
+                }
+
+                std::vector<uint8_t> data(size);
+                received = recv(ccd->desc, data.data(), size, MSG_WAITALL);
+                if (received != size) {
+                    log::warn("Incomplete data received");
+                    continue;
+                }
+
+                
+                pmanager->postHe(packet, data);
+            } else {
+                std::vector<uint8_t> data;
+                pmanager->postHe(packet, data);
             }
-            
-            pmanager->postHe(packet, data);
-            
         }
     } catch (const std::exception& e) {
-        log::err(std::string("Client error: ") + e.what());
+        log::err("Client handler crashed: " + std::string(e.what()));
     }
-}
-void serverManager::sendData(hex_t clientHx, std::vector<uint8_t> data){
     
+    deleteClientPcm(client_hex);
+};
+void serverManager::sendData(hex_t clientHx, std::vector<uint8_t> data){
     PacketController::packetManager* pm =  hmanager->getClienPcm(clientHx);
-
+  
     if(pm){
         size_t data_size = data.size();
         packet_s phead;
         phead.type[0] = packet_type::data;
         phead.hxcode[0] = generate_random_byte();
         phead.hxcode[1] = generate_random_byte();
+        phead.timeout[0] = 0x0A;
         phead.datasize[0] = static_cast<uint8_t>(data_size & 0xFF);        
         phead.datasize[1] = static_cast<uint8_t>((data_size >> 8) & 0xFF); 
+      
+        std::lock_guard<std::mutex> (hmanager->map_mutex);
         pm->postMy(phead,data);
     }
     else{

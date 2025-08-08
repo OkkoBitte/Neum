@@ -14,7 +14,8 @@ public:
     }
 
     void getClientData(hex_t client_hex, const std::vector<uint8_t>& data) override {
-        std::cout<<"get:";
+        auto client = getClient(client_hex);
+        std::cout<<"GET "<<client->sey.sey_main<<" -> ";
         for(auto bite : data){
             std::cout<<std::hex<<bite;
         }
