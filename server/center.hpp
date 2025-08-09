@@ -400,7 +400,7 @@ void hostManager::handleClient(hex_t client_hex) {
                 break;
             }
 
-        \
+        
             ccd->last_activity_time = time(nullptr);
             manager->mdfClient(client_hex, *ccd);
 
