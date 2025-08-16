@@ -1,8 +1,8 @@
 #define NULL_STR ""
 
-#define VERSION_CODE 34
-#define VERSION_NAME_SERVER "0.1.0-release[guard]"
-#define VERSION_NAME_CLIENT "0.1.0-release[guard]"
+#define VERSION_CODE 40
+#define VERSION_NAME_SERVER "0.1.1-release[stable]"
+#define VERSION_NAME_CLIENT "0.1.1-release[stable]"
 
 
 

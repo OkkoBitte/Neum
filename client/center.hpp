@@ -121,8 +121,7 @@ private:
         if (send(sockfd, &chpr, sizeof(chpr), MSG_WAITALL) != sizeof(chpr))  { 
             log::warn("Failed to send client header");
         }
-        // std::thread cdl([&](){getServerData();});
-        // cdl.detach();
+
         
         startCommunication();
         return true;
@@ -190,6 +189,10 @@ private:
                             if (recv(sockfd, data.data(), size, MSG_WAITALL) == size) {
                                 manager->pmanager.postHe(packet, data);
                             }
+                        }
+                        else{
+                            std::vector<uint8_t> data;
+                            manager->pmanager.postHe(packet, data);
                         }
                     } else if (received == 0) {
                         log::def("Server closed connection");

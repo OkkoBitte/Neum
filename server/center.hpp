@@ -193,12 +193,9 @@ void serverManager::MENEGMANT_CLIENTS() {
         for (const auto& [hex, co, last_activity, sey, desc] : clients_data) {
             const time_t inactive_time = now - last_activity;
             
-            if (inactive_time > sleep_threshold && 
-                (co.code3 == 0x00 || (inactive_time > static_cast<int>(co.code3) && 
-                 static_cast<int>(co.code3) > max_sleep_threshold))) {
+            if (inactive_time > sleep_threshold && (co.code3 == 0x00 || (inactive_time > static_cast<int>(co.code3) &&  static_cast<int>(co.code3) > max_sleep_threshold))) {
                 to_purge.push_back(hex);
-                log::warn("PURGE TIMEOUT: " + std::string(sey.sey_main) + 
-                        " [" + std::to_string(desc) + "]");
+                log::warn("PURGE TIMEOUT: " + std::string(sey.sey_main,20) + " [" + std::to_string(desc) + "]");
             }
         }
 
@@ -212,8 +209,7 @@ void serverManager::MENEGMANT_CLIENTS() {
 
         
         auto elapsed = std::chrono::steady_clock::now() - start_time;
-        auto sleep_duration = std::chrono::milliseconds(SLEEP_MS) - 
-                            std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
+        auto sleep_duration = std::chrono::milliseconds(SLEEP_MS) -  std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
         
         if (sleep_duration.count() > 0) {
             std::this_thread::sleep_for(sleep_duration);
@@ -310,6 +306,9 @@ bool hostManager::startSocketServer() {
             continue;
         }
 
+        
+        
+
         char session_key[20] = {0};
         strncpy(session_key, header.client_sey, sizeof(header.client_sey));
         
@@ -356,7 +355,11 @@ void hostManager::handleClient(hex_t client_hex) {
         setsockopt(ccd->desc, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
 
         while (isActive) {
-            std::vector<packetActions> pactos = pmanager->managment_packets();
+            std::vector<packetActions> pactos ;
+            {
+                std::lock_guard<std::mutex> lock(map_mutex);
+                pactos = pmanager->managment_packets();
+            }
             for (auto& act : pactos) {
                 if (act.action == action_e::close_client) {
                     log::def("Closing client "+std::to_string(ccd->desc));
@@ -376,6 +379,9 @@ void hostManager::handleClient(hex_t client_hex) {
                                      act.packet.data.begin(), 
                                      act.packet.data.end());
                     send(ccd->desc, full_packet.data(), full_packet.size(), 0);
+
+
+
                 }
             }
 
@@ -395,15 +401,15 @@ void hostManager::handleClient(hex_t client_hex) {
                 if (received == 0) {
                     log::def("Client disconnected: "+std::to_string(ccd->desc));
                 } else {
-                    log::warn("Receive error: "+std::to_string(errno));
+                    log::warn("Receive error: "+std::to_string(errno)+", Free.");
                 }
                 break;
             }
 
-        
+
             ccd->last_activity_time = time(nullptr);
             manager->mdfClient(client_hex, *ccd);
-
+        
           
             uint16_t size = (packet.datasize[1] << 8) | packet.datasize[0];
             if (size > 0) {
@@ -419,10 +425,11 @@ void hostManager::handleClient(hex_t client_hex) {
                     continue;
                 }
 
-                
+                std::lock_guard<std::mutex> lock(map_mutex);
                 pmanager->postHe(packet, data);
             } else {
                 std::vector<uint8_t> data;
+                std::lock_guard<std::mutex> lock(map_mutex);
                 pmanager->postHe(packet, data);
             }
         }
@@ -447,6 +454,7 @@ void serverManager::sendData(hex_t clientHx, std::vector<uint8_t> data){
       
         std::lock_guard<std::mutex> (hmanager->map_mutex);
         pm->postMy(phead,data);
+
     }
     else{
         log::err ("Dont get client from send data");
