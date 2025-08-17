@@ -306,6 +306,11 @@ bool hostManager::startSocketServer() {
             continue;
         }
 
+        if (header.client_options[9] != mazor_code){
+            close(clientSocket);
+            continue;
+        }
+
         
         
 

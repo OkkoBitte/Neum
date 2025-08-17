@@ -153,11 +153,24 @@ namespace PacketController{
         
         std::vector<packetActions> actions;
 
+        void isOk() {
+            const size_t maxElements = 1000; 
+            const size_t maxBytes =  10 * 1024 * 1024; 
 
+            size_t totalBytes = isMy.size() * sizeof(packContoll) + 
+                                actions.size() * sizeof(packetActions);
+
+            if (isMy.size() > maxElements || actions.size() > maxElements || totalBytes > maxBytes) {
+                isMy.clear();
+                actions.clear();
+                actions.push_back(packetActions({action_e::close_client, {}}));
+                log::err("Memory limit exceeded"); 
+            }
+        }
         public:
             std::optional<server_configure> sconf;
             void postHe(packet_s &packet, std::vector<uint8_t> &data){
-                
+                isOk();
                 if (*packet.type == packet_type::menegmend) { // [ACK]
                     isMy.erase(
                         std::remove_if(
@@ -208,6 +221,7 @@ namespace PacketController{
 
             };
             void postMy(packet_s &packet, std::vector<uint8_t> &data){
+                isOk();
                 packetActions pactoin;
                 pactoin.action = action_e::send_data;
 
@@ -245,6 +259,7 @@ namespace PacketController{
             };
 
             std::vector<packetActions> managment_packets() {
+        
                 std::vector<packetActions> acp;
                 acp.swap(actions); 
                 
