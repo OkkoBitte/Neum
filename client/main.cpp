@@ -52,7 +52,6 @@ int main(int argc, char* argv[]) {
     uint8_t opts[10] = {};
     opts[0] = 0x01; // new
     opts[2] = 0x0A; // 256
-    opts[9] = mazor_code; // version
     cf.options = req10_t(opts);
 
     char msey[20] = "LoreLoracrateEinzAd";

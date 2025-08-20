@@ -23,7 +23,10 @@ public:
     void loop();
     client_configure& config;
     std::mutex pmut;
-    PacketController::packetManager pmanager;
+    while (!pmanager.postMy(phead, data)){
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        pmanager.postMy(phead, data);
+    }
 
 protected:
     clientManager(client_configure& conf) : config(conf) {}
