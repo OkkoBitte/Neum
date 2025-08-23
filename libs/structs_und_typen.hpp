@@ -124,7 +124,8 @@ struct packet_type{
 };
 
 struct packet_controll{
-    const static uint8_t close = 0xff;
+    const static uint8_t hier = 0xA0; // wir hier
+    const static uint8_t close = 0xff; // close
 };
 
 struct packet_s{
