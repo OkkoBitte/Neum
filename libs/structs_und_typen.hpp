@@ -72,6 +72,7 @@ struct client_connection_data {
     time_t time_start;         
     time_t last_activity_time; 
     req10_t client_options;
+    req10_t options_static;
     sey_t sey;
     int desc;
 

@@ -1,7 +1,7 @@
 #define NULL_STR ""
 
 #define VERSION_CODE 51
-#define VERSION_NAME_SERVER "0.1.12-release[backup-stable]"
+#define VERSION_NAME_SERVER "0.1.13-release[update]"
 #define VERSION_NAME_CLIENT "0.1.13-release[update]"
 
 
@@ -16,3 +16,27 @@ static constexpr const char* FO__KRR__CONF       = "-1";
 
 const std::string help1_server = "|[Neum:S][HELP] server config.krr   \n\n\tfor get more data --describe\n\tfor get help --help\n";
 std::string help2_server = "|[Neum:S][DESCRIBE] \n\n\tVersion Code "+std::to_string(VERSION_CODE)+"\n\tVersion Name"+VERSION_NAME_SERVER+"\n\n More web-mbg.ru\n\n";
+template <typename G>
+void hxout_struct(G gdata){
+        std::cout<<"HERE: -----------/---------STURCT----"<<std::endl;
+        std::vector<uint8_t> data(reinterpret_cast<uint8_t*>(&gdata), reinterpret_cast<uint8_t*>(&gdata) + sizeof(gdata));
+        for (auto d : data) {
+            std::cout << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(d) << " ";
+        }
+        std::cout << std::dec << std::endl; 
+        for (auto d : data) {
+            std::cout  << static_cast<char>(d) << " ";
+        }
+        std::cout << std::dec << std::endl;
+}
+void hxout_data(std::vector<uint8_t> data){
+      std::cout<<"HERE: -----------/--------DATA--"<<std::endl;
+    for (auto d : data) {
+        std::cout << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(d) << " ";
+    }
+    std::cout << std::dec << std::endl; 
+    for (auto d : data) {
+        std::cout  << static_cast<char>(d) << " ";
+    }
+    std::cout << std::dec << std::endl;
+}

@@ -172,12 +172,12 @@ void serverManager::MENEGMANT_CLIENTS() {
         auto start_time = std::chrono::steady_clock::now();
         
       
-        std::vector<std::tuple<hex_t, req10_t, time_t, sey_t, int>> clients_data;
+        std::vector<std::tuple<hex_t, req10_t, req10_t, time_t, sey_t, int>> clients_data;
         {
             std::lock_guard<std::mutex> lock(map_mutex);
             clients_data.reserve(virtual_connections.size());
             for (const auto& [hex, data] : virtual_connections) {
-                clients_data.emplace_back(hex, data.client_options, 
+                clients_data.emplace_back(hex, data.client_options, data.options_static,
                                         data.last_activity_time, 
                                         data.sey, 
                                         data.desc);
@@ -190,12 +190,16 @@ void serverManager::MENEGMANT_CLIENTS() {
         const int sleep_threshold = serverConfigure.sleepClients;
         const int max_sleep_threshold = serverConfigure.maxSleepClients;
 
-        for (const auto& [hex, co, last_activity, sey, desc] : clients_data) {
+        for (const auto& [hex, co,os, last_activity, sey, desc] : clients_data) {
             const time_t inactive_time = now - last_activity;
             
             if (inactive_time > sleep_threshold && (co.code3 == 0x00 || (inactive_time > static_cast<int>(co.code3) &&  static_cast<int>(co.code3) > max_sleep_threshold))) {
                 to_purge.push_back(hex);
                 log::warn("PURGE TIMEOUT: " + std::string(sey.sey_main,20) + " [" + std::to_string(desc) + "]");
+            }
+            if (os.code2 == true){
+                to_purge.push_back(hex);
+                log::def("PURGE STATIC CLOSE: " + std::string(sey.sey_main,20) + " [" + std::to_string(desc) + "]");
             }
         }
 
@@ -379,7 +383,12 @@ void hostManager::handleClient(hex_t client_hex) {
                                      act.packet.data.begin(), 
                                      act.packet.data.end());
                     send(ccd->desc, full_packet.data(), full_packet.size(), 0);
-
+                    
+                    
+                    {
+                        std::lock_guard<std::mutex> lock(manager->map_mutex);
+                        if (ccd->client_options.code2 == 1) ccd->options_static.code2 = true;
+                    }
 
 
                 }
@@ -396,7 +405,7 @@ void hostManager::handleClient(hex_t client_hex) {
 
             packet_s packet;
             ssize_t received = recv(ccd->desc, &packet, sizeof(packet), MSG_WAITALL);
-            
+           
             if (received <= 0) {
                 if (received == 0) {
                     log::def("Client disconnected: "+std::to_string(ccd->desc));
@@ -420,6 +429,7 @@ void hostManager::handleClient(hex_t client_hex) {
 
                 std::vector<uint8_t> data(size);
                 received = recv(ccd->desc, data.data(), size, MSG_WAITALL);
+                
                 if (received != size) {
                     log::warn("Incomplete data received");
                     continue;

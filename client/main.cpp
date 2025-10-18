@@ -51,6 +51,7 @@ int main(int argc, char* argv[]) {
 
     uint8_t opts[10] = {};
     opts[0] = 0x01; // new
+    opts[1] = 0x01; // get-close
     opts[2] = 0x0A; // 256
     cf.options = req10_t(opts);
 
